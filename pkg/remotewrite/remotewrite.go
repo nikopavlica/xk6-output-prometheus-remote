@@ -136,9 +136,6 @@ func (o *Output) convertToTimeSeries(samplesContainers []metrics.SampleContainer
 		samples := samplesContainer.GetSamples()
 
 		for _, sample := range samples {
-			if seen[sample.Metric.Name] {
-				continue
-			}
 			// Prometheus remote write treats each label array in TimeSeries as the same
 			// for all Samples in those TimeSeries (https://github.com/prometheus/prometheus/blob/03d084f8629477907cab39fc3d314b375eeac010/storage/remote/write_handler.go#L75).
 			// But K6 metrics can have different tags per each Sample so in order not to
@@ -152,13 +149,12 @@ func (o *Output) convertToTimeSeries(samplesContainers []metrics.SampleContainer
 
 			if newts, err := o.metrics.transform(o.mapping, sample, labels); err != nil {
 				o.logger.Error(err)
-			} else {
+			} else if !seen[sample.Metric.Name] {
 				promTimeSeries = append(promTimeSeries, newts...)
+				// We only need 1 sample per metric per remote
+				// write, not one every 50ms(!!).
+				seen[sample.Metric.Name] = true
 			}
-
-			// We only need 1 sample per metric per remote
-			// write, not one every 50ms(!!).
-			seen[sample.Metric.Name] = true
 		}
 
 		// Do not blow up if remote endpoint is overloaded and responds too slowly.
